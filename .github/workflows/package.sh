@@ -36,7 +36,7 @@ mkdir package
 cd package || exit 1
 
 # Copy the freshly built plugin DLL to the packaging directory and archive
-cp "../Jellyfin.Plugin.MediaAnalyzer/bin/Release/net7.0/Jellyfin.Plugin.MediaAnalyzer.dll" ./ || exit 1
+cp "../Jellyfin.Plugin.MediaAnalyzer/bin/Release/net8.0/Jellyfin.Plugin.MediaAnalyzer.dll" ./ || exit 1
 zip "$zip" Jellyfin.Plugin.MediaAnalyzer.dll || exit 1
 
 # Calculate the checksum of the archive
