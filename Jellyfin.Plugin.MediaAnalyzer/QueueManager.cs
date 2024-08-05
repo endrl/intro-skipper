@@ -237,11 +237,11 @@ public class QueueManager
                 }
 
                 // Movie can have multiple MediaSources like 1080p and a 4k file, they have different ids
-                // foreach (MediaSourceInfo source in movie.GetMediaSources(false))
-                // {
-                _logger.LogInformation("Adding movie: '{Name}'", movie.Name);
-                QueueMovie(movie);
-                // }
+                foreach (MediaSourceInfo source in movie.GetMediaSources(false))
+                {
+                    _logger.LogInformation("Adding movie: '{Name}'", source.Name);
+                    QueueMovie(source);
+                }
             }
             else
             {
@@ -325,7 +325,7 @@ public class QueueManager
         Plugin.Instance!.TotalQueued++;
     }
 
-    private void QueueMovie(Movie movie)
+    private void QueueMovie(MediaSourceInfo movie)
     {
         if (Plugin.Instance is null)
         {
@@ -365,15 +365,15 @@ public class QueueManager
             60 * Plugin.Instance!.Configuration.AnalysisLengthLimit);
 
         // Allocate a new list for each movie
-        _queuedEpisodes.TryAdd(movie.Id, new List<QueuedMedia>());
+        _queuedEpisodes.TryAdd(Guid.Parse(movie.Id), new List<QueuedMedia>());
 
         // Queue the movie for analysis
         var maxCreditsDuration = Plugin.Instance!.Configuration.MaximumMovieCreditsDuration;
-        _queuedEpisodes[movie.Id].Add(new QueuedMedia()
+        _queuedEpisodes[Guid.Parse(movie.Id)].Add(new QueuedMedia()
         {
             SeriesName = movie.Name,
             SeasonNumber = 0,
-            ItemId = movie.Id,
+            ItemId = Guid.Parse(movie.Id),
             Name = movie.Name,
             Path = movie.Path,
             Duration = Convert.ToInt32(duration),
