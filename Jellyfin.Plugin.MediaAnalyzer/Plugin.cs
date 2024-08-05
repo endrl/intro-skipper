@@ -4,12 +4,12 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Xml.Serialization;
 using Jellyfin.Data.Entities;
 using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.MediaAnalyzer.Configuration;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
+using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
@@ -31,7 +31,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     private IXmlSerializer _xmlSerializer;
     private ILibraryManager _libraryManager;
     private IItemRepository _itemRepository;
-    private IMediaSegmentsManager _mediaSegmentsManager;
+    private IMediaSegmentManager _mediaSegmentsManager;
     private ILogger<Plugin> _logger;
     private string _pluginCachePath;
     private string _pluginDbPath;
@@ -52,7 +52,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         IServerConfigurationManager serverConfiguration,
         ILibraryManager libraryManager,
         IItemRepository itemRepository,
-        IMediaSegmentsManager mediaSegmentsManager,
+        IMediaSegmentManager mediaSegmentsManager,
         ILogger<Plugin> logger)
         : base(applicationPaths, xmlSerializer)
     {
@@ -129,25 +129,16 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     public ICollection<BlacklistSegment> Blacklist { get; private set; }
 
     /// <summary>
-    /// Delete segments from db.
-    /// </summary>
-    /// <param name="type">Type of Media segment.</param>
-    /// <returns>Task.</returns>
-    public async Task DeleteSegementsWithType(MediaSegmentType type)
-    {
-        await _mediaSegmentsManager.DeleteSegmentsAsync(type: type, typeIndex: 0).ConfigureAwait(false);
-    }
-
-    /// <summary>
     /// Delete segments by id.
+    /// TODO Remove deletion endpoint? Just for blacklist?.
     /// </summary>
-    /// <param name="itemId">Type of Media segment.</param>
+    /// <param name="itemId">Id of segment.</param>
     /// <returns>Task.</returns>
     public async Task DeleteSegementsById(Guid itemId)
     {
-        _logger.LogDebug("Delete Segments for itemId: {Item}", itemId);
-
-        await _mediaSegmentsManager.DeleteSegmentsAsync(itemId: itemId).ConfigureAwait(false);
+        _logger.LogDebug("Delete Segments for segmentId: {Item}", itemId);
+        // TODO Just accepts id of segment not itemid
+        await _mediaSegmentsManager.DeleteSegmentAsync(itemId).ConfigureAwait(false);
         DeleteBlacklist(itemId);
     }
 
@@ -160,7 +151,8 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     public Dictionary<Guid, Segment> GetMediaSegmentsById(Guid itemId, AnalysisMode mode)
     {
         var type = mode == AnalysisMode.Introduction ? MediaSegmentType.Intro : MediaSegmentType.Outro;
-        var segments = _mediaSegmentsManager.GetAllMediaSegments(itemId: itemId, type: type);
+        var segments = Task.Run(() => _mediaSegmentsManager.GetSegmentsAsync(itemId, [type])).Result;
+
         var intros = new Dictionary<Guid, Segment>();
 
         foreach (var item in segments)
@@ -168,8 +160,8 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
             intros.Add(item.ItemId, new Segment()
             {
                 ItemId = item.ItemId,
-                Start = item.Start,
-                End = item.End,
+                Start = Ticks.TicksToS(item.StartTicks),
+                End = Ticks.TicksToS(item.EndTicks),
             });
         }
 
@@ -184,26 +176,21 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// <returns>Task.</returns>
     public async Task SaveSegmentsAsync(Dictionary<Guid, Segment> segments, AnalysisMode mode)
     {
-        var allSegments = new List<MediaSegment>();
         var type = mode == AnalysisMode.Introduction ? MediaSegmentType.Intro : MediaSegmentType.Outro;
-        var episodeAction = mode == AnalysisMode.Introduction ? this.Configuration.SeriesIntroAction : this.Configuration.SeriesOutroAction;
-        var movieAction = this.Configuration.MoviesOutroAction;
 
         foreach (var (key, value) in segments)
         {
-            var seg = new MediaSegment()
+            var seg = new MediaSegmentDto()
             {
-                Start = Math.Round(value.Start, 2, MidpointRounding.AwayFromZero),
-                End = Math.Round(value.End, 2, MidpointRounding.AwayFromZero),
+                StartTicks = Ticks.SToTicks(value.Start),
+                EndTicks = Ticks.SToTicks(value.End),
                 ItemId = value.ItemId,
                 Type = type,
-                Action = value.IsEpisode ? episodeAction : movieAction,
             };
 
-            allSegments.Add(seg);
+            await _mediaSegmentsManager.CreateSegmentAsync(seg, this.Name).ConfigureAwait(false);
+            // TODO Add more meta data and save in plugin database
         }
-
-        await _mediaSegmentsManager.CreateMediaSegmentsAsync(allSegments).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -253,7 +240,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         return commit;
     }
 
-    internal BaseItem GetItem(Guid id)
+    internal BaseItem? GetItem(Guid id)
     {
         return _libraryManager.GetItemById(id);
     }
@@ -265,7 +252,15 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// <returns>Full path to item.</returns>
     internal string GetItemPath(Guid id)
     {
-        return GetItem(id).Path;
+        var baseItem = GetItem(id);
+        if (baseItem is not null)
+        {
+            return baseItem.Path;
+        }
+        else
+        {
+            return string.Empty;
+        }
     }
 
     /// <summary>
@@ -352,7 +347,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// <summary>
     /// Delete Blacklisted database entries.
     /// </summary>
-    /// <param name="id">Optional just id.</param>
+    /// <param name="id">Optional just segment id.</param>
     public void DeleteBlacklist(Guid? id)
     {
         using (var context = new MediaAnalyzerDbContext(this._pluginDbPath))

@@ -11,6 +11,8 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Dto;
+using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
@@ -192,9 +194,9 @@ public class QueueManager
             ParentId = Guid.Parse(rawId),
             OrderBy = new[]
             {
-                ("SeriesSortName", SortOrder.Ascending),
-                ("ParentIndexNumber", SortOrder.Ascending),
-                ("IndexNumber", SortOrder.Ascending),
+                (ItemSortBy.SeriesSortName, SortOrder.Ascending),
+                (ItemSortBy.ParentIndexNumber, SortOrder.Ascending),
+                (ItemSortBy.IndexNumber, SortOrder.Ascending),
             },
             IncludeItemTypes = includes,
             Recursive = true,
@@ -234,8 +236,12 @@ public class QueueManager
                     continue;
                 }
 
+                // Movie can have multiple MediaSources like 1080p and a 4k file, they have different ids
+                // foreach (MediaSourceInfo source in movie.GetMediaSources(false))
+                // {
                 _logger.LogInformation("Adding movie: '{Name}'", movie.Name);
                 QueueMovie(movie);
+                // }
             }
             else
             {

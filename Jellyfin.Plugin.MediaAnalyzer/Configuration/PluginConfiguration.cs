@@ -1,5 +1,3 @@
-using Jellyfin.Data.Entities;
-using Jellyfin.Data.Enums;
 using MediaBrowser.Model.Plugins;
 
 namespace Jellyfin.Plugin.MediaAnalyzer.Configuration;
@@ -17,21 +15,6 @@ public class PluginConfiguration : BasePluginConfiguration
     }
 
     // ===== General settings =====
-
-    /// <summary>
-    /// Gets or sets the recommended action for series intro segments.
-    /// </summary>
-    public MediaSegmentAction SeriesIntroAction { get; set; } = MediaSegmentAction.Auto;
-
-    /// <summary>
-    /// Gets or sets a the recommended action for series outro segments.
-    /// </summary>
-    public MediaSegmentAction SeriesOutroAction { get; set; } = MediaSegmentAction.Auto;
-
-    /// <summary>
-    /// Gets or sets a the recommended action for movies outro segments.
-    /// </summary>
-    public MediaSegmentAction MoviesOutroAction { get; set; } = MediaSegmentAction.Auto;
 
     /// <summary>
     /// Gets or sets a value indicating whether we run after a library scan.

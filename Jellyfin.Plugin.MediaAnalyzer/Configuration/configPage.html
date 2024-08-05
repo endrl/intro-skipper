@@ -12,51 +12,6 @@
                         <fieldset class="verticalSection-extrabottompadding">
                             <legend>General</legend>
 
-                            <div class="selectContainer">
-                                <label class="selectLabel" for="SeriesIntroAction">TV Show Intro Action</label>
-                                <select is="emby-select" id="SeriesIntroAction" class="emby-select-withcolor emby-select">
-                                    <option value="Auto">Auto</option>
-                                    <option value="None">None (Do nothing)</option>
-                                    <option value="Skip">Skip (Force Skip Intro)</option>
-                                    <option value="Mute">Mute (Mute the Intro)</option>
-                                    <option value="Prompt">Prompt (Ask user for skip)</option>
-                                </select>
-                                <div class="fieldDescription">
-                                    Recommend an Action for Intro Segments <br />
-                                    <strong>Just change if you don't like the Jellyfin default of 'Prompt'.</strong>
-                                </div>
-                            </div>
-
-                            <div class="selectContainer">
-                                <label class="selectLabel" for="SeriesOutroAction">TV Show Outro Action</label>
-                                <select is="emby-select" id="SeriesOutroAction" class="emby-select-withcolor emby-select">
-                                    <option value="Auto">Auto</option>
-                                    <option value="None">None (Do nothing)</option>
-                                    <option value="Skip">Skip (Force Skip Outro)</option>
-                                    <option value="Mute">Mute (Mute the Outro)</option>
-                                    <option value="Prompt">Prompt (Ask user for skip)</option>
-                                </select>
-                                <div class="fieldDescription">
-                                    Recommend an Action for Outro Segments <br />
-                                    <strong>Just change if you don't like the Jellyfin default of 'Prompt'.</strong>
-                                </div>
-                            </div>
-
-                            <div class="selectContainer">
-                                <label class="selectLabel" for="MoviesOutroAction">Movie Outro Action</label>
-                                <select is="emby-select" id="MoviesOutroAction" class="emby-select-withcolor emby-select">
-                                    <option value="Auto">Auto</option>
-                                    <option value="None">None (Do nothing)</option>
-                                    <option value="Skip">Skip (Force Skip Outro)</option>
-                                    <option value="Mute">Mute (Mute the Outro)</option>
-                                    <option value="Prompt">Prompt (Ask user for skip)</option>
-                                </select>
-                                <div class="fieldDescription">
-                                    Recommend an Action for Outro Segments <br />
-                                    <strong>Just change if you don't like the Jellyfin default of 'Prompt'.</strong>
-                                </div>
-                            </div>
-
                             <div class="checkboxContainer checkboxContainer-withDescription">
                                 <label class="emby-checkbox-label">
                                     <input id="RunAfterLibraryScan" type="checkbox" is="emby-checkbox" />
@@ -343,9 +298,6 @@
                 // all plugin configuration fields that can be get or set with .value (i.e. strings or numbers).
                 var configurationFields = [
                     // General
-                    "SeriesIntroAction",
-                    "SeriesOutroAction",
-                    "MoviesOutroAction",
                     // analysis
                     "MaxParallelism",
                     "SelectedLibraries",

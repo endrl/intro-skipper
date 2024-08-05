@@ -4,9 +4,9 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Tasks;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.MediaAnalyzer;
@@ -14,7 +14,7 @@ namespace Jellyfin.Plugin.MediaAnalyzer;
 /// <summary>
 /// Act on changes of the jellyfin library.
 /// </summary>
-public class LibraryChangedEntrypoint : IServerEntryPoint
+public sealed class LibraryChangedEntrypoint : IHostedService, IDisposable
 {
     private readonly ILibraryManager _libraryManager;
     private readonly ITaskManager _taskManager;
@@ -42,24 +42,29 @@ public class LibraryChangedEntrypoint : IServerEntryPoint
         _loggerFactory = loggerFactory;
 
         _queueTimer = new Timer(
-                OnQueueTimerCallback,
-                null,
-                Timeout.InfiniteTimeSpan,
-                Timeout.InfiniteTimeSpan);
+         OnQueueTimerCallback,
+         null,
+         Timeout.InfiniteTimeSpan,
+         Timeout.InfiniteTimeSpan);
     }
 
-    /// <summary>
-    /// Run observer tasks for observed events.
-    /// </summary>
-    /// <returns>Task.</returns>
-    public Task RunAsync()
+    /// <inheritdoc/>
+    public Task StartAsync(CancellationToken cancellationToken)
     {
         _libraryManager.ItemAdded += LibraryManagerItemAdded;
         _libraryManager.ItemUpdated += LibraryManagerItemUpdated;
         _libraryManager.ItemRemoved += LibraryManagerItemRemoved;
-        _taskManager.TaskCompleted += TaskManagerTaskCompleted;
         FFmpegWrapper.Logger = _logger;
 
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        _libraryManager.ItemAdded -= LibraryManagerItemAdded;
+        _libraryManager.ItemUpdated -= LibraryManagerItemUpdated;
+        _libraryManager.ItemRemoved -= LibraryManagerItemRemoved;
         return Task.CompletedTask;
     }
 
@@ -241,32 +246,9 @@ public class LibraryChangedEntrypoint : IServerEntryPoint
         }
     }
 
-    /// <summary>
-    /// Dispose.
-    /// </summary>
+    /// <inheritdoc/>
     public void Dispose()
     {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
-    /// <summary>
-    /// Protected dispose.
-    /// </summary>
-    /// <param name="dispose">Dispose.</param>
-    protected virtual void Dispose(bool dispose)
-    {
-        if (!dispose)
-        {
-            _libraryManager.ItemAdded -= LibraryManagerItemAdded;
-            _libraryManager.ItemUpdated -= LibraryManagerItemUpdated;
-            _libraryManager.ItemRemoved -= LibraryManagerItemRemoved;
-
-            _taskManager.TaskCompleted -= TaskManagerTaskCompleted;
-
-            _queueTimer.Dispose();
-
-            return;
-        }
+        _queueTimer.Dispose();
     }
 }
