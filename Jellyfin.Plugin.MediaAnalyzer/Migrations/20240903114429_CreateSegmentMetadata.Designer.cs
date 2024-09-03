@@ -3,6 +3,7 @@ using System;
 using Jellyfin.Plugin.MediaAnalyzer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Jellyfin.Plugin.MediaAnalyzer.Migrations
 {
     [DbContext(typeof(MediaAnalyzerDbContext))]
-    partial class MediaAnalyzerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20240903114429_CreateSegmentMetadata")]
+    partial class CreateSegmentMetadata
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.3");
