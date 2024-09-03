@@ -16,6 +16,8 @@ Experimental implementation to add **official** Intro/Outro (and more) support t
 2. Install the Media Analyzer plugin from the General section
 3. Restart Jellyfin
 4. Go to Dashboard -> Scheduled Tasks -> Analyze Media and click the play button
+5. There is no Task Timer configured, create one if you want to scan daily (by default it will scan after "MediaLibrary scan" and when new items are added. You can disable this behaviour in the settings)
+
 
 ## Related projects
 

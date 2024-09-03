@@ -86,7 +86,7 @@ public class ChromaprintAnalyzer : IMediaFileAnalyzer
             var item = episodeAnalysisQueue.First();
             _logger.LogInformation("Found just one episode for {Series}: S{Season}. Skipping as we need at least two.", item.SeriesName, item.SeasonNumber);
 
-            item.SkipBlacklist = true;
+            item.SkipPreventAnalyzing = true;
             episodesWithoutSegments.Add(item);
             return episodesWithoutSegments.AsReadOnly();
         }

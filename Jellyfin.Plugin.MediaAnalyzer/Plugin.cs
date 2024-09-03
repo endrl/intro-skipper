@@ -65,7 +65,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         _logger = logger;
 
         FFmpegPath = serverConfiguration.GetEncodingOptions().EncoderAppPathDisplay;
-        Blacklist = new List<BlacklistSegment>();
+        Blacklist = new List<SegmentMetadata>();
 
         _pluginCachePath = Path.Join(applicationPaths.CachePath, "JFPMediaAnalyzer");
         _pluginDbPath = Path.Join(applicationPaths.PluginConfigurationsPath, "mediaanalyzer.db");
@@ -126,7 +126,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// <summary>
     /// Gets list for Blacklisted elements. Just available during scans.
     /// </summary>
-    public ICollection<BlacklistSegment> Blacklist { get; private set; }
+    public ICollection<SegmentMetadata> Blacklist { get; private set; }
 
     /// <summary>
     /// Delete segments by id.
@@ -157,7 +157,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 
         foreach (var item in segments)
         {
-            intros.Add(item.ItemId, new Segment()
+            intros.TryAdd(item.ItemId, new Segment()
             {
                 ItemId = item.ItemId,
                 Start = Ticks.TicksToS(item.StartTicks),
@@ -177,8 +177,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     public async Task SaveSegmentsAsync(Dictionary<Guid, Segment> segments, AnalysisMode mode)
     {
         var type = mode == AnalysisMode.Introduction ? MediaSegmentType.Intro : MediaSegmentType.Outro;
-
-        foreach (var (key, value) in segments)
+        foreach (var (_, value) in segments)
         {
             var seg = new MediaSegmentDto()
             {
@@ -293,14 +292,14 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     {
         lock (_serializationLock)
         {
-            var newBlackList = new List<BlacklistSegment>();
+            var newBlackList = new List<SegmentMetadata>();
 
             // transform to blacklist
             foreach (var seg in media)
             {
                 var segName = seg.IsEpisode ? string.Format(CultureInfo.InvariantCulture, "{0} S{1}: {2}", seg.SeriesName, seg.SeasonNumber, seg.Name) : string.Format(CultureInfo.InvariantCulture, "{0}", seg.Name);
                 var type = mode == AnalysisMode.Introduction ? MediaSegmentType.Intro : MediaSegmentType.Outro;
-                var s = new BlacklistSegment
+                var s = new SegmentMetadata
                 {
                     ItemId = seg.ItemId,
                     Type = type,
@@ -331,12 +330,12 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         // update db
         using (var context = new MediaAnalyzerDbContext(this._pluginDbPath))
         {
-            var storedBlacklist = context.BlacklistSegment.ToList();
+            var storedBlacklist = context.SegmentMetadata.ToList();
             foreach (var seg in this.Blacklist)
             {
                 if (!storedBlacklist.Contains(seg))
                 {
-                    context.BlacklistSegment.Add(seg);
+                    context.SegmentMetadata.Add(seg);
                 }
             }
 
@@ -352,7 +351,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     {
         using (var context = new MediaAnalyzerDbContext(this._pluginDbPath))
         {
-            var delete = id is not null ? context.BlacklistSegment.Where(s => s.ItemId == id).ToList() : context.BlacklistSegment.ToList();
+            var delete = id is not null ? context.SegmentMetadata.Where(s => s.ItemId == id && s.PreventAnalyzing).ToList() : context.SegmentMetadata.ToList();
             context.RemoveRange(delete);
             context.SaveChanges();
         }
@@ -367,13 +366,22 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         {
             using (var context = new MediaAnalyzerDbContext(this._pluginDbPath))
             {
-                this.Blacklist = context.BlacklistSegment.ToList();
+                this.Blacklist = context.SegmentMetadata.ToList();
             }
         }
         else
         {
             this.Blacklist.Clear();
         }
+    }
+
+    /// <summary>
+    /// Get context of plugin database.
+    /// </summary>
+    /// <returns>Instance of db.</returns>
+    public MediaAnalyzerDbContext GetPluginDb()
+    {
+        return new MediaAnalyzerDbContext(this._pluginDbPath);
     }
 
     private void OnConfigurationChanged(object? sender, BasePluginConfiguration e)

@@ -77,9 +77,13 @@ public class BaseItemAnalyzerTask
         {
             // Since the first run of the task can run for multiple hours, ensure that none
             // of the current media items were deleted from Jellyfin since the task was started.
-            var (episodes, unanalyzed) = queueManager.VerifyQueue(
+            var verifiedItems = queueManager.VerifyQueue(
                 season.Value.AsReadOnly(),
                 this._analysisMode);
+
+            var notBlacklistedItems = queueManager.FilterWithBlacklist(verifiedItems, this._analysisMode);
+
+            var (episodes, unanalyzed) = queueManager.FilterWithSegments(notBlacklistedItems, this._analysisMode);
 
             if (episodes.Count == 0)
             {
@@ -202,7 +206,7 @@ public class BaseItemAnalyzerTask
         }
 
         // Unanalyzed items should be blacklisted
-        var blacklisted = items.Where(i => !i.SkipBlacklist).ToList();
+        var blacklisted = items.Where(i => !i.SkipPreventAnalyzing).ToList();
 
         if (blacklisted.Count > 0 && Plugin.Instance!.Configuration.EnableBlacklist)
         {

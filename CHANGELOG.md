@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-* None
+* Task Timer is no longer configured by deafult. We listen for MediaLibrary changes instead. (Change back in options)
 
 ## v0.4.0.0 (2023-11-02)
 

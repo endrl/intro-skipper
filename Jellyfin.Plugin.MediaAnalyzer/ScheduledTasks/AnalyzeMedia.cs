@@ -113,13 +113,6 @@ public class AnalyzeMedia : IScheduledTask
     /// <returns>Task triggers.</returns>
     public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
     {
-        return new[]
-        {
-            new TaskTriggerInfo
-            {
-                Type = TaskTriggerInfo.TriggerDaily,
-                TimeOfDayTicks = TimeSpan.FromHours(0).Ticks
-            }
-        };
+        return Array.Empty<TaskTriggerInfo>();
     }
 }

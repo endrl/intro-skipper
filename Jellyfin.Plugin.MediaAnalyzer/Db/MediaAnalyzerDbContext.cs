@@ -27,13 +27,13 @@ public class MediaAnalyzerDbContext : DbContext
     {
         var folder = Environment.SpecialFolder.LocalApplicationData;
         var path = Environment.GetFolderPath(folder);
-        dbPath = System.IO.Path.Join(path, "jfpmediaanalyzer.db");
+        dbPath = System.IO.Path.Join(path, "mediaanalyzer.db");
     }
 
     /// <summary>
     /// Gets the <see cref="DbSet{TEntity}"/> containing the blacklisted segments.
     /// </summary>
-    public DbSet<BlacklistSegment> BlacklistSegment => Set<BlacklistSegment>();
+    public DbSet<SegmentMetadata> SegmentMetadata => Set<SegmentMetadata>();
 
     /// <inheritdoc/>
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -42,8 +42,15 @@ public class MediaAnalyzerDbContext : DbContext
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<BlacklistSegment>()
-        .HasKey(s => new { s.ItemId, s.Type });
+        modelBuilder.Entity<SegmentMetadata>()
+            .HasKey(s => s.Id);
+
+        modelBuilder.Entity<SegmentMetadata>()
+            .Property(s => s.Id)
+            .ValueGeneratedOnAdd();
+
+        modelBuilder.Entity<SegmentMetadata>()
+            .HasIndex(s => s.ItemId);
     }
 
     /// <summary>

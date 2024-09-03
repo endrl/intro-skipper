@@ -95,4 +95,9 @@ public class Segment
     /// Gets or sets a value indicating whether this is an episode (not a movie).
     /// </summary>
     public bool IsEpisode { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets which analyzer created this segment.
+    /// </summary>
+    public AnalyzerType? AnalyzerType { get; set; }
 }

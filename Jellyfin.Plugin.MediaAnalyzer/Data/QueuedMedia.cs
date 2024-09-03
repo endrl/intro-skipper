@@ -8,7 +8,7 @@ namespace Jellyfin.Plugin.MediaAnalyzer;
 public class QueuedMedia
 {
     /// <summary>
-    /// Gets or sets the Episode name.
+    /// Gets or sets the Series name.
     /// </summary>
     public string SeriesName { get; set; } = string.Empty;
 
@@ -30,13 +30,13 @@ public class QueuedMedia
     /// <summary>
     /// Gets or sets a value indicating whether this media has been already analyzed.
     /// </summary>
-    public bool IsAnalyzed { get; set; } = false;
+    public bool IsAnalyzed { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether this media should be skipped for blacklisting.
     /// This will happen when a Season has just one episode, which can't be Chromaprint compared analyzed but maybe at a later run.
     /// </summary>
-    public bool SkipBlacklist { get; set; } = false;
+    public bool SkipPreventAnalyzing { get; set; }
 
     /// <summary>
     /// Gets or sets the full path to episode.
@@ -44,7 +44,7 @@ public class QueuedMedia
     public string Path { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the name of the media, episode or movie.
+    /// Gets or sets the name of the media, episode or movie with source name/quality.
     /// </summary>
     public string Name { get; set; } = string.Empty;
 

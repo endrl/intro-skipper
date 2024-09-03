@@ -2,7 +2,7 @@
 name: "Media Analyzer"
 guid: "80885677-DACB-461B-AC97-EE7E971288AA"
 version: "0.1.0.0"
-targetAbi: "10.9.0.0"
+targetAbi: "10.10.0.0"
 framework: "net8.0"
 overview: "Analyzes the audio of television episodes to detect intros."
 description: >
