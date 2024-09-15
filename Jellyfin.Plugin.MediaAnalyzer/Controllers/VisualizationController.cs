@@ -2,7 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Net.Mime;
-using System.Threading.Tasks;
+using Jellyfin.Data.Enums;
+using MediaBrowser.Controller.Library;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -18,14 +19,23 @@ namespace Jellyfin.Plugin.MediaAnalyzer.Controllers;
 [Route("JellyfinPluginIntroSkip")]
 public class VisualizationController : ControllerBase
 {
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly ILibraryManager _libraryManager;
     private readonly ILogger<VisualizationController> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="VisualizationController"/> class.
     /// </summary>
     /// <param name="logger">Logger.</param>
-    public VisualizationController(ILogger<VisualizationController> logger)
+    /// <param name="loggerFactory">loggerFactory.</param>
+    /// <param name="libraryManager">libraryManager.</param>
+    public VisualizationController(
+        ILogger<VisualizationController> logger,
+        ILoggerFactory loggerFactory,
+        ILibraryManager libraryManager)
     {
+        _loggerFactory = loggerFactory;
+        _libraryManager = libraryManager;
         _logger = logger;
     }
 
@@ -39,9 +49,11 @@ public class VisualizationController : ControllerBase
         _logger.LogDebug("Returning season names by series");
 
         var showSeasons = new Dictionary<string, HashSet<string>>();
+        var queueManager = new QueueManager(_loggerFactory.CreateLogger<QueueManager>(), _libraryManager, MediaSegmentType.Intro);
+        var queuedMedia = queueManager.GetMediaItems();
 
         // Loop through all seasons in the analysis queue
-        foreach (var kvp in Plugin.Instance!.QueuedMediaItems)
+        foreach (var kvp in queuedMedia)
         {
             // Check that this season contains at least one episode.
             var episodes = kvp.Value;
@@ -105,14 +117,17 @@ public class VisualizationController : ControllerBase
     [HttpGet("Episode/{Id}/Chromaprint")]
     public ActionResult<uint[]> GetEpisodeFingerprint([FromRoute] Guid id)
     {
+        var queueManager = new QueueManager(_loggerFactory.CreateLogger<QueueManager>(), _libraryManager, MediaSegmentType.Intro);
+        var queuedMedia = queueManager.GetMediaItems();
+
         // Search through all queued episodes to find the requested id
-        foreach (var season in Plugin.Instance!.QueuedMediaItems)
+        foreach (var season in queuedMedia)
         {
             foreach (var needle in season.Value)
             {
                 if (needle.ItemId == id)
                 {
-                    return FFmpegWrapper.Fingerprint(needle, AnalysisMode.Introduction);
+                    return FFmpegWrapper.Fingerprint(needle, MediaSegmentType.Intro);
                 }
             }
         }
@@ -134,7 +149,10 @@ public class VisualizationController : ControllerBase
     /// <returns>Boolean indicating if the requested season was found.</returns>
     private bool LookupSeasonByName(string series, string season, out List<QueuedMedia> episodes)
     {
-        foreach (var queuedEpisodes in Plugin.Instance!.QueuedMediaItems)
+        var queueManager = new QueueManager(_loggerFactory.CreateLogger<QueueManager>(), _libraryManager, MediaSegmentType.Intro);
+        var queuedMedia = queueManager.GetMediaItems();
+
+        foreach (var queuedEpisodes in queuedMedia)
         {
             var first = queuedEpisodes.Value[0];
             var firstSeasonName = GetSeasonName(first);

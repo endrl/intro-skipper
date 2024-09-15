@@ -1,23 +1,28 @@
 # Jellyfin Media Analyzer
 
-Experimental implementation to add **official** Intro/Outro (and more) support to Jellyfin. Analyzes the audio of television episodes to detect intros and cedits, for movies detect credits.
+Analyzes Movies and TV Shows to detect Intros and Outros. Uses the new official Jellyfin API.
 
-### If you are looking for a replacement of [ConfusedPolarBear Intro Skipper](https://github.com/ConfusedPolarBear/intro-skipper) please move on to [jumoog Fork](https://github.com/jumoog/intro-skipper)
+## Features
+
+* Detect Intro segments in tv shows
+* Detect Outro segments in tv shows and movies
+* Multiple Detection Types
+  * Chapter Analyzer (Intro/Outro): Scan chapter names for trigger words like 'Intro' 'End'
+  * Chromaprint Analyzer (Intro/Outro - tv shows): Compare audio fingerprints of two media files and find matches
+  * BlackFrame Analyzer (Outro): Scan for continous mostly black content
+* [Jellyfin Segment Editor](https://github.com/endrl/segment-editor?tab=readme-ov-file#jellyfin-segment-editor) support
 
 ## Requirements
 
-- **Jellyfin Server with media segments API!**
-  - Please read these [instructions](https://github.com/endrl/segment-editor#installation)
+* ⚠️ Jellyfin 10.10 unstable. For Jellyfin 10.8/10.9 use [jumoog's intro-skipper](https://github.com/jumoog/intro-skipper)
 
 ## Installation instructions
 
-0. Read the Requirements
 1. Add plugin repository to your server: `https://raw.githubusercontent.com/endrl/jellyfin-plugin-repo/master/manifest.json`
 2. Install the Media Analyzer plugin from the General section
 3. Restart Jellyfin
 4. Go to Dashboard -> Scheduled Tasks -> Analyze Media and click the play button
 5. There is no Task Timer configured, create one if you want to scan daily (by default it will scan after "MediaLibrary scan" and when new items are added. You can disable this behaviour in the settings)
-
 
 ## Related projects
 

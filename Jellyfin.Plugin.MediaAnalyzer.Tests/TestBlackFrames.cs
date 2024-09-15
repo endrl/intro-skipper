@@ -2,6 +2,7 @@ namespace Jellyfin.Plugin.MediaAnalyzer.Tests;
 
 using System;
 using System.Collections.Generic;
+using Jellyfin.Data.Enums;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
@@ -37,7 +38,7 @@ public class TestBlackFrames
         var episode = queueFile("credits.mp4");
         episode.Duration = (int)new TimeSpan(0, 5, 30).TotalSeconds;
 
-        var result = analyzer.AnalyzeMediaFile(episode, AnalysisMode.Credits, 85);
+        var result = analyzer.AnalyzeMediaFile(episode, MediaSegmentType.Outro, 85);
         Assert.NotNull(result);
         Assert.InRange(result.Start, 300 - range, 300 + range);
     }

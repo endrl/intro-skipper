@@ -23,11 +23,6 @@ public class QueuedMedia
     public Guid ItemId { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether this media is an episode, part of a tv show.
-    /// </summary>
-    public bool IsEpisode { get; set; } = true;
-
-    /// <summary>
     /// Gets or sets a value indicating whether this media has been already analyzed.
     /// </summary>
     public bool IsAnalyzed { get; set; }
@@ -39,14 +34,19 @@ public class QueuedMedia
     public bool SkipPreventAnalyzing { get; set; }
 
     /// <summary>
-    /// Gets or sets the full path to episode.
+    /// Gets or sets the full path to episode/movie.
     /// </summary>
     public string Path { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the name of the media, episode or movie with source name/quality.
+    /// Gets or sets the name of the media, episode or movie.
     /// </summary>
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the name of the source like quality (1080p, 4k, ...).
+    /// </summary>
+    public string SourceName { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the timestamp (in seconds) to stop searching for an introduction at.
@@ -73,5 +73,30 @@ public class QueuedMedia
     public override int GetHashCode()
     {
         return ItemId.GetHashCode();
+    }
+
+    /// <summary>
+    /// Gets the full name of the media, episode or movie with source name/quality.
+    /// </summary>
+    /// <returns>The full name of the media.</returns>
+    public string GetFullName()
+    {
+        if (IsEpisode())
+        {
+            return $"{SeriesName} S{SeasonNumber} - {Name}";
+        }
+        else
+        {
+            return $"{Name} ({SourceName})";
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this media is an episode, part of a tv show.
+    /// </summary>
+    /// <returns>Is an episode or not.</returns>
+    public bool IsEpisode()
+    {
+        return !string.IsNullOrEmpty(SeriesName);
     }
 }

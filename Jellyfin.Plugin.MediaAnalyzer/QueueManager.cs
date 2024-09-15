@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
@@ -19,7 +20,7 @@ using Microsoft.Extensions.Logging;
 /// </summary>
 public class QueueManager
 {
-    private readonly AnalysisMode _analysisMode;
+    private readonly MediaSegmentType _analyzingType;
     private ILibraryManager _libraryManager;
     private ILogger<QueueManager> _logger;
     private double analysisPercent;
@@ -34,11 +35,11 @@ public class QueueManager
     /// <param name="logger">Logger.</param>
     /// <param name="libraryManager">Library manager.</param>
     /// <param name="mode">Analysis mode.</param>
-    public QueueManager(ILogger<QueueManager> logger, ILibraryManager libraryManager, AnalysisMode mode)
+    public QueueManager(ILogger<QueueManager> logger, ILibraryManager libraryManager, MediaSegmentType mode)
     {
         _logger = logger;
         _libraryManager = libraryManager;
-        _analysisMode = mode;
+        _analyzingType = mode;
 
         selectedLibraries = new();
         _queuedMedia = new();
@@ -208,7 +209,7 @@ public class QueueManager
         var includes = new BaseItemKind[] { BaseItemKind.Episode };
 
         // When analyzing for credits also search for movies
-        if (_analysisMode == AnalysisMode.Credits)
+        if (_analyzingType == MediaSegmentType.Outro)
         {
             includes = includes.Concat(new BaseItemKind[] { BaseItemKind.Movie }).ToArray();
         }
@@ -396,15 +397,13 @@ public class QueueManager
         var maxCreditsDuration = Plugin.Instance!.Configuration.MaximumMovieCreditsDuration;
         _queuedMedia[Guid.Parse(source.Id)].Add(new QueuedMedia()
         {
-            SeriesName = movie.Name,
-            SeasonNumber = 0,
             ItemId = Guid.Parse(source.Id),
-            Name = $"{movie.Name} ({source.Name})",
+            Name = movie.Name,
+            SourceName = source.Name,
             Path = source.Path,
             Duration = Convert.ToInt32(duration),
             IntroFingerprintEnd = Convert.ToInt32(fingerprintDuration),
             CreditsFingerprintStart = Convert.ToInt32(duration - maxCreditsDuration),
-            IsEpisode = false,
         });
     }
 
@@ -415,7 +414,7 @@ public class QueueManager
     /// <param name="candidates">Queued media items.</param>
     /// <param name="mode">Analysis mode.</param>
     /// <returns>Media items that have been verified to exist in Jellyfin and in storage.</returns>
-    public ReadOnlyCollection<QueuedMedia> VerifyQueue(ReadOnlyCollection<QueuedMedia> candidates, AnalysisMode mode)
+    public ReadOnlyCollection<QueuedMedia> VerifyQueue(ReadOnlyCollection<QueuedMedia> candidates, MediaSegmentType mode)
     {
         var verified = new List<QueuedMedia>();
 
@@ -450,8 +449,8 @@ public class QueueManager
     /// <param name="candidates">Queued media items.</param>
     /// <param name="mode">Analysis mode.</param>
     /// <returns>Media items that have no segment.</returns>
-    public (ReadOnlyCollection<QueuedMedia> FilteredItems, bool AnyUnanalyzed)
-        FilterWithSegments(ReadOnlyCollection<QueuedMedia> candidates, AnalysisMode mode)
+    public async Task<(ReadOnlyCollection<QueuedMedia> FilteredItems, bool AnyUnanalyzed)>
+        FilterWithSegmentsAsync(ReadOnlyCollection<QueuedMedia> candidates, MediaSegmentType mode)
     {
         var unanalyzed = false;
         var verified = new List<QueuedMedia>();
@@ -460,9 +459,9 @@ public class QueueManager
         {
             try
             {
-                var timestamps = Plugin.Instance!.GetMediaSegmentsById(candidate.ItemId, mode);
+                var timestamps = await Plugin.Instance!.GetMediaSegmentsDb().HasSegments(candidate.ItemId, mode).ConfigureAwait(false);
 
-                if (!timestamps.ContainsKey(candidate.ItemId))
+                if (!timestamps)
                 {
                     unanalyzed = true;
                 }
@@ -493,18 +492,16 @@ public class QueueManager
     /// <param name="candidates">Queued media items.</param>
     /// <param name="mode">Analysis mode.</param>
     /// <returns>Media items that are not blacklisted.</returns>
-    public ReadOnlyCollection<QueuedMedia> FilterWithBlacklist(ReadOnlyCollection<QueuedMedia> candidates, AnalysisMode mode)
+    public async Task<ReadOnlyCollection<QueuedMedia>> FilterWithBlacklistAsync(ReadOnlyCollection<QueuedMedia> candidates, MediaSegmentType mode)
     {
-        var blacklisted = Plugin.Instance!.Blacklist;
         var verified = new List<QueuedMedia>();
 
         foreach (var candidate in candidates)
         {
             try
             {
-                var timestamps = Plugin.Instance!.GetMediaSegmentsById(candidate.ItemId, mode);
-
-                if (!blacklisted.Any(s => s.ItemId == candidate.ItemId && s.Type == (mode == AnalysisMode.Introduction ? MediaSegmentType.Intro : MediaSegmentType.Outro)))
+                var prevent = await Plugin.Instance!.GetMetadataDb().PreventAnalyze(candidate.ItemId, mode == MediaSegmentType.Intro ? MediaSegmentType.Intro : MediaSegmentType.Outro).ConfigureAwait(false);
+                if (!prevent)
                 {
                     verified.Add(candidate);
                 }

@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Data.Enums;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
@@ -69,7 +70,7 @@ public sealed class LibraryChangedEntrypoint : IHostedService, IDisposable
     }
 
     /// <summary>
-    /// Delete blacklisted segments for itemid when library removed it.
+    /// Delete segments for itemid when library removed it.
     /// </summary>
     /// <param name="sender">The sending entity.</param>
     /// <param name="itemChangeEventArgs">The <see cref="ItemChangeEventArgs"/>.</param>
@@ -85,7 +86,7 @@ public sealed class LibraryChangedEntrypoint : IHostedService, IDisposable
             return;
         }
 
-        Plugin.Instance!.DeleteBlacklist(itemChangeEventArgs.Item.Id);
+        _ = Plugin.Instance!.GetMetadataDb().DeleteSegments(itemChangeEventArgs.Item.Id, null);
     }
 
     /// <summary>
@@ -208,12 +209,9 @@ public sealed class LibraryChangedEntrypoint : IHostedService, IDisposable
         var progress = new Progress<double>();
         var cancellationToken = new CancellationToken(false);
 
-        // load blacklist
-        Plugin.Instance!.GetBlacklistFromDb();
-
         // intro
         var introBaseAnalyzer = new BaseItemAnalyzerTask(
-            AnalysisMode.Introduction,
+            MediaSegmentType.Intro,
             _loggerFactory.CreateLogger<AnalyzeMedia>(),
             _loggerFactory,
             _libraryManager);
@@ -222,18 +220,12 @@ public sealed class LibraryChangedEntrypoint : IHostedService, IDisposable
 
         // outro
         var outroBaseAnalyzer = new BaseItemAnalyzerTask(
-            AnalysisMode.Credits,
+            MediaSegmentType.Outro,
             _loggerFactory.CreateLogger<AnalyzeMedia>(),
             _loggerFactory,
             _libraryManager);
 
         outroBaseAnalyzer.AnalyzeItems(progress, cancellationToken);
-
-        // save blacklist to db
-        Plugin.Instance!.SaveBlacklist();
-
-        // reset blacklist
-        Plugin.Instance!.Blacklist.Clear();
 
         Plugin.Instance!.AnalysisRunning = false;
 

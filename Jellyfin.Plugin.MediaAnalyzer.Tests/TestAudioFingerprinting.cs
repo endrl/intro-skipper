@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using Xunit;
 using Microsoft.Extensions.Logging;
+using Jellyfin.Data.Enums;
 
 namespace Jellyfin.Plugin.MediaAnalyzer.Tests;
 
@@ -61,7 +62,7 @@ public class TestAudioFingerprinting
 
         var actual = FFmpegWrapper.Fingerprint(
             queueEpisode("audio/big_buck_bunny_intro.mp3"),
-            AnalysisMode.Introduction);
+            MediaSegmentType.Intro);
 
         Assert.Equal(expected, actual);
     }
@@ -93,8 +94,8 @@ public class TestAudioFingerprinting
 
         var lhsEpisode = queueEpisode("audio/big_buck_bunny_intro.mp3");
         var rhsEpisode = queueEpisode("audio/big_buck_bunny_clip.mp3");
-        var lhsFingerprint = FFmpegWrapper.Fingerprint(lhsEpisode, AnalysisMode.Introduction);
-        var rhsFingerprint = FFmpegWrapper.Fingerprint(rhsEpisode, AnalysisMode.Introduction);
+        var lhsFingerprint = FFmpegWrapper.Fingerprint(lhsEpisode, MediaSegmentType.Intro);
+        var rhsFingerprint = FFmpegWrapper.Fingerprint(rhsEpisode, MediaSegmentType.Intro);
 
         var (lhs, rhs) = chromaprint.CompareEpisodes(
             lhsEpisode.ItemId,

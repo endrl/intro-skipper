@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using Jellyfin.Data.Enums;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.MediaAnalyzer;
@@ -110,16 +111,16 @@ public static class FFmpegWrapper
     /// <param name="episode">Queued episode to fingerprint.</param>
     /// <param name="mode">Portion of media file to fingerprint. Introduction = first 25% / 10 minutes and Credits = last 4 minutes.</param>
     /// <returns>Numerical fingerprint points.</returns>
-    public static uint[] Fingerprint(QueuedMedia episode, AnalysisMode mode)
+    public static uint[] Fingerprint(QueuedMedia episode, MediaSegmentType mode)
     {
         int start, end;
 
-        if (mode == AnalysisMode.Introduction)
+        if (mode == MediaSegmentType.Intro)
         {
             start = 0;
             end = episode.IntroFingerprintEnd;
         }
-        else if (mode == AnalysisMode.Credits)
+        else if (mode == MediaSegmentType.Outro)
         {
             start = episode.CreditsFingerprintStart;
             end = episode.Duration;
@@ -460,7 +461,7 @@ public static class FFmpegWrapper
     /// <param name="start">Time (in seconds) relative to the start of the file to start fingerprinting from.</param>
     /// <param name="end">Time (in seconds) relative to the start of the file to stop fingerprinting at.</param>
     /// <returns>Numerical fingerprint points.</returns>
-    private static uint[] Fingerprint(QueuedMedia episode, AnalysisMode mode, int start, int end)
+    private static uint[] Fingerprint(QueuedMedia episode, MediaSegmentType mode, int start, int end)
     {
         // Try to load this episode from cache before running ffmpeg.
         if (LoadCachedFingerprint(episode, mode, out uint[] cachedFingerprint))
@@ -514,7 +515,7 @@ public static class FFmpegWrapper
     /// <returns>true if the episode was successfully loaded from cache, false on any other error.</returns>
     private static bool LoadCachedFingerprint(
         QueuedMedia episode,
-        AnalysisMode mode,
+        MediaSegmentType mode,
         out uint[] fingerprint)
     {
         fingerprint = Array.Empty<uint>();
@@ -570,7 +571,7 @@ public static class FFmpegWrapper
     /// <param name="fingerprint">Fingerprint of the episode to store.</param>
     private static void CacheFingerprint(
         QueuedMedia episode,
-        AnalysisMode mode,
+        MediaSegmentType mode,
         List<uint> fingerprint)
     {
         // Bail out if caching isn't enabled.
@@ -599,17 +600,17 @@ public static class FFmpegWrapper
     /// </summary>
     /// <param name="episode">Episode.</param>
     /// <param name="mode">Analysis mode.</param>
-    private static string GetFingerprintCachePath(QueuedMedia episode, AnalysisMode mode)
+    private static string GetFingerprintCachePath(QueuedMedia episode, MediaSegmentType mode)
     {
         var basePath = Path.Join(
             Plugin.Instance!.FingerprintCachePath,
             episode.ItemId.ToString("N"));
 
-        if (mode == AnalysisMode.Introduction)
+        if (mode == MediaSegmentType.Intro)
         {
             return basePath;
         }
-        else if (mode == AnalysisMode.Credits)
+        else if (mode == MediaSegmentType.Outro)
         {
             return basePath + "-credits";
         }

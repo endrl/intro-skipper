@@ -2,7 +2,13 @@
 
 ## Unreleased
 
+### Changed
+
 * Task Timer is no longer configured by deafult. We listen for MediaLibrary changes instead. (Change back in options)
+
+### Fixed
+
+* Prevents a crash during save when start >= end time
 
 ## v0.4.0.0 (2023-11-02)
 

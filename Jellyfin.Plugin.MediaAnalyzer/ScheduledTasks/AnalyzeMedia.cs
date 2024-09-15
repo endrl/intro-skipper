@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Data.Enums;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
@@ -72,12 +73,9 @@ public class AnalyzeMedia : IScheduledTask
             Plugin.Instance!.AnalysisRunning = true;
         }
 
-        // load blacklist
-        Plugin.Instance!.GetBlacklistFromDb();
-
         // intro
         var introBaseAnalyzer = new BaseItemAnalyzerTask(
-            AnalysisMode.Introduction,
+            MediaSegmentType.Intro,
             _loggerFactory.CreateLogger<AnalyzeMedia>(),
             _loggerFactory,
             _libraryManager);
@@ -89,18 +87,12 @@ public class AnalyzeMedia : IScheduledTask
 
         // outro
         var outroBaseAnalyzer = new BaseItemAnalyzerTask(
-            AnalysisMode.Credits,
+            MediaSegmentType.Outro,
             _loggerFactory.CreateLogger<AnalyzeMedia>(),
             _loggerFactory,
             _libraryManager);
 
         outroBaseAnalyzer.AnalyzeItems(progress, cancellationToken);
-
-        // save blacklist to db
-        Plugin.Instance!.SaveBlacklist();
-
-        // reset blacklist
-        Plugin.Instance!.Blacklist.Clear();
 
         Plugin.Instance!.AnalysisRunning = false;
 

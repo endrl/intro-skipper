@@ -6,6 +6,8 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Numerics;
 using System.Threading;
+using System.Threading.Tasks;
+using Jellyfin.Data.Enums;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
@@ -31,7 +33,7 @@ public class ChromaprintAnalyzer : IMediaFileAnalyzer
 
     private ILogger<ChromaprintAnalyzer> _logger;
 
-    private AnalysisMode _analysisMode;
+    private MediaSegmentType _analyzingType;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ChromaprintAnalyzer"/> class.
@@ -50,9 +52,9 @@ public class ChromaprintAnalyzer : IMediaFileAnalyzer
     }
 
     /// <inheritdoc />
-    public ReadOnlyCollection<QueuedMedia> AnalyzeMediaFiles(
+    public async Task<(ReadOnlyCollection<QueuedMedia> NotAnalyzed, ReadOnlyDictionary<Guid, Segment> Analyzed, ReadOnlyDictionary<Guid, SegmentMetadata> SegmentMetadata)> AnalyzeMediaFilesAsync(
         ReadOnlyCollection<QueuedMedia> analysisQueue,
-        AnalysisMode mode,
+        MediaSegmentType mode,
         CancellationToken cancellationToken)
     {
         // All segments for this season.
@@ -67,7 +69,9 @@ public class ChromaprintAnalyzer : IMediaFileAnalyzer
         // Episodes that were analyzed and do not have an introduction.
         var episodesWithoutSegments = new List<QueuedMedia>();
 
-        this._analysisMode = mode;
+        var metadata = new Dictionary<Guid, SegmentMetadata>();
+
+        this._analyzingType = mode;
 
         // we need at least two episodes, it's possible to use an already analzyed one as reference
         if (episodeAnalysisQueue.Count == 1 && analysisQueue.Count > 1)
@@ -88,7 +92,7 @@ public class ChromaprintAnalyzer : IMediaFileAnalyzer
 
             item.SkipPreventAnalyzing = true;
             episodesWithoutSegments.Add(item);
-            return episodesWithoutSegments.AsReadOnly();
+            return (episodesWithoutSegments.AsReadOnly(), seasonSegments.AsReadOnly(), metadata.AsReadOnly());
         }
 
         // Compute fingerprints for all episodes in the season
@@ -100,7 +104,7 @@ public class ChromaprintAnalyzer : IMediaFileAnalyzer
 
                 if (cancellationToken.IsCancellationRequested)
                 {
-                    return analysisQueue;
+                    return (analysisQueue, seasonSegments.AsReadOnly(), metadata.AsReadOnly());
                 }
             }
             catch (FingerprintException ex)
@@ -148,7 +152,7 @@ public class ChromaprintAnalyzer : IMediaFileAnalyzer
                  *
                  * To fix this, add the starting time of the fingerprint to the reported time range.
                  */
-                if (this._analysisMode == AnalysisMode.Credits)
+                if (this._analyzingType == MediaSegmentType.Outro)
                 {
                     currentIntro.Start += currentEpisode.CreditsFingerprintStart;
                     currentIntro.End += currentEpisode.CreditsFingerprintStart;
@@ -163,14 +167,33 @@ public class ChromaprintAnalyzer : IMediaFileAnalyzer
                     !seasonSegments.TryGetValue(currentIntro.ItemId, out var savedCurrentIntro) ||
                     currentIntro.Duration > savedCurrentIntro.Duration)
                 {
-                    seasonSegments[currentIntro.ItemId] = currentIntro;
+                    if (ValidateTime(currentIntro))
+                    {
+                        var meta = await Plugin.Instance!.GetMetadataDb().GetSegments(currentEpisode.ItemId, mode, AnalyzerType.ChromaprintAnalyzer);
+
+                        if (meta is null)
+                        {
+                            metadata[currentIntro.ItemId] = new SegmentMetadata(currentEpisode, mode, AnalyzerType.ChromaprintAnalyzer);
+                        }
+
+                        seasonSegments[currentIntro.ItemId] = currentIntro;
+                    }
                 }
 
                 if (
                     !seasonSegments.TryGetValue(remainingIntro.ItemId, out var savedRemainingIntro) ||
                     remainingIntro.Duration > savedRemainingIntro.Duration)
                 {
-                    seasonSegments[remainingIntro.ItemId] = remainingIntro;
+                    if (ValidateTime(currentIntro))
+                    {
+                        var meta = await Plugin.Instance!.GetMetadataDb().GetSegments(remainingEpisode.ItemId, mode, AnalyzerType.ChromaprintAnalyzer);
+                        if (meta is null)
+                        {
+                            metadata[remainingIntro.ItemId] = new SegmentMetadata(remainingEpisode, mode, AnalyzerType.ChromaprintAnalyzer);
+                        }
+
+                        seasonSegments[remainingIntro.ItemId] = remainingIntro;
+                    }
                 }
 
                 break;
@@ -180,29 +203,21 @@ public class ChromaprintAnalyzer : IMediaFileAnalyzer
             episodesWithoutSegments.Add(currentEpisode);
         }
 
-        // If cancellation was requested, report that no episodes were analyzed.
-        if (cancellationToken.IsCancellationRequested)
-        {
-            return analysisQueue;
-        }
-
-        if (this._analysisMode == AnalysisMode.Introduction)
+        if (this._analyzingType == MediaSegmentType.Intro)
         {
             // Adjust all introduction end times so that they end at silence.
             seasonSegments = AdjustIntroEndTimes(analysisQueue, seasonSegments);
         }
 
-        if (seasonSegments.Count != 0)
+        // If cancellation was requested, report that no episodes were analyzed.
+        if (cancellationToken.IsCancellationRequested)
         {
-            _logger.LogInformation("Save {Count} segments", seasonSegments.Count);
-            Plugin.Instance!.UpdateTimestamps(seasonSegments, this._analysisMode);
-        }
-        else
-        {
-            _logger.LogDebug("No segments found");
+            seasonSegments.Clear();
+            metadata.Clear();
+            return (analysisQueue, seasonSegments.AsReadOnly(), metadata.AsReadOnly());
         }
 
-        return episodesWithoutSegments.AsReadOnly();
+        return (episodesWithoutSegments.AsReadOnly(), seasonSegments.AsReadOnly(), metadata.AsReadOnly());
     }
 
     /// <summary>
@@ -393,7 +408,7 @@ public class ChromaprintAnalyzer : IMediaFileAnalyzer
         // Since LHS had a contiguous time range, RHS must have one also.
         var rContiguous = TimeRangeHelpers.FindContiguous(rhsTimes.ToArray(), maximumTimeSkip)!;
 
-        if (this._analysisMode == AnalysisMode.Introduction)
+        if (this._analyzingType == MediaSegmentType.Intro)
         {
             // Tweak the end timestamps just a bit to ensure as little content as possible is skipped over.
             // TODO: remove this
@@ -500,5 +515,15 @@ public class ChromaprintAnalyzer : IMediaFileAnalyzer
     public int CountBits(uint number)
     {
         return BitOperations.PopCount(number);
+    }
+
+    /// <summary>
+    /// Be sure the segment have a valid time.
+    /// </summary>
+    /// <param name="seg">Segment.</param>
+    /// <returns>True is valid.</returns>
+    private bool ValidateTime(Segment seg)
+    {
+        return seg.End > seg.Start;
     }
 }

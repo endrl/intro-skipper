@@ -11,12 +11,15 @@ public class SegmentMetadata
     /// <summary>
     /// Initializes a new instance of the <see cref="SegmentMetadata"/> class.
     /// </summary>
-    /// <param name="intro">intro.</param>
-    /// <param name="mode">mode.</param>
-    public SegmentMetadata(Segment intro, AnalysisMode mode)
+    /// <param name="media">Media item.</param>
+    /// <param name="mode">The mode it ran.</param>
+    /// <param name="analyzer">Analyzer who created it.</param>
+    public SegmentMetadata(QueuedMedia media, MediaSegmentType mode, AnalyzerType analyzer)
     {
-        ItemId = intro.ItemId;
-        Type = mode == AnalysisMode.Introduction ? MediaSegmentType.Intro : MediaSegmentType.Outro;
+        ItemId = media.ItemId;
+        Type = mode;
+        AnalyzerType = analyzer;
+        Name = media.GetFullName();
     }
 
     /// <summary>
@@ -32,14 +35,9 @@ public class SegmentMetadata
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Gets or sets the name for the Media (Episode or Movie+Source).
+    /// Gets or sets the "full" name for the Media (Series + Season + Episode or Movie + Source).
     /// </summary>
     public string Name { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets the series name if applicable.
-    /// </summary>
-    public string SeriesName { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the segment Id of Jellyfin.
@@ -64,7 +62,7 @@ public class SegmentMetadata
     /// <summary>
     /// Gets or sets which analyzer created this segment.
     /// </summary>
-    public AnalyzerType? AnalyzerType { get; set; }
+    public AnalyzerType AnalyzerType { get; set; } = AnalyzerType.NotSet;
 
     /// <summary>
     /// Gets or sets the analyzer note. Data that an analyzer might provide as additional info.

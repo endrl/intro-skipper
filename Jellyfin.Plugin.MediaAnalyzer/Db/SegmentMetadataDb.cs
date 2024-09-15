@@ -1,10 +1,9 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
-using MediaBrowser.Controller.Library;
+using Jellyfin.Extensions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jellyfin.Plugin.MediaAnalyzer;
@@ -12,22 +11,17 @@ namespace Jellyfin.Plugin.MediaAnalyzer;
 /// <summary>
 /// Database api for segment metadata.
 /// </summary>
-public sealed class SegmentMetadataDbApi : IDisposable
+public class SegmentMetadataDb
 {
-    private Plugin _plugin;
-
-    private ILibraryManager _libraryManager;
+    private string _pluginDbPath;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="SegmentMetadataDbApi"/> class.
+    /// Initializes a new instance of the <see cref="SegmentMetadataDb"/> class.
     /// </summary>
-    /// <param name="plugin">Plugin instance.</param>
-    /// <param name="libraryManager">LibraryManager.</param>
-    public SegmentMetadataDbApi(Plugin plugin, ILibraryManager libraryManager)
+    /// <param name="pluginDbPath">Plugin db path.</param>
+    public SegmentMetadataDb(string pluginDbPath)
     {
-        _plugin = plugin;
-        _libraryManager = libraryManager;
-        _libraryManager.ItemRemoved += LibraryManagerItemRemoved;
+        _pluginDbPath = pluginDbPath;
     }
 
     /// <summary>
@@ -36,8 +30,34 @@ public sealed class SegmentMetadataDbApi : IDisposable
     /// <param name="seg">Segment.</param>
     public async void SaveSegment(SegmentMetadata seg)
     {
-        using var db = _plugin.GetPluginDb();
+        using var db = GetPluginDb();
         await CreateOrUpdate(db, seg).ConfigureAwait(false);
+        await db.SaveChangesAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Create prevent analyze segments from QueuedMedia.
+    /// </summary>
+    /// <param name="media">Queued Media.</param>
+    /// <param name="mode">Mode.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    public async Task CreatePreventAnalyzeSegments(IReadOnlyCollection<QueuedMedia> media, MediaSegmentType mode)
+    {
+        using var db = GetPluginDb();
+
+        foreach (var seg in media)
+        {
+            var newseg = new SegmentMetadata
+            {
+                Name = seg.GetFullName(),
+                Type = mode,
+                PreventAnalyzing = true,
+                ItemId = seg.ItemId,
+            };
+
+            await CreateOrUpdate(db, newseg).ConfigureAwait(false);
+        }
+
         await db.SaveChangesAsync().ConfigureAwait(false);
     }
 
@@ -48,7 +68,7 @@ public sealed class SegmentMetadataDbApi : IDisposable
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<SegmentMetadata> GetSegment(Guid segmentId)
     {
-        using var db = _plugin.GetPluginDb();
+        using var db = GetPluginDb();
         return await db.SegmentMetadata.AsNoTracking().FirstAsync(s => s.SegmentId == segmentId).ConfigureAwait(false);
     }
 
@@ -57,25 +77,50 @@ public sealed class SegmentMetadataDbApi : IDisposable
     /// </summary>
     /// <param name="itemId">Media ItemId.</param>
     /// <param name="type">Segment Type.</param>
+    /// <param name="analyzer">Optional: type of ananlyzer.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public async Task<IEnumerable<SegmentMetadata>> GetSegments(Guid itemId, MediaSegmentType type)
+    public async Task<IEnumerable<SegmentMetadata>> GetSegments(Guid itemId, MediaSegmentType type, AnalyzerType? analyzer)
     {
-        using var db = _plugin.GetPluginDb();
+        using var db = GetPluginDb();
         var query = db.SegmentMetadata.Where(s => s.ItemId == itemId && s.Type == type);
+        if (analyzer is not null)
+        {
+            query = query.Where(s => s.AnalyzerType == analyzer);
+        }
+
         return await query.AsNoTracking().ToListAsync().ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Check if itemId and type should be prevented to analyze. Just the first segment is used.
+    /// Check if itemId and type should be prevented to analyze. AnalyzerType of these segments is NotSet.
     /// </summary>
     /// <param name="itemId">Media ItemId.</param>
     /// <param name="type">Segment Type.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<bool> PreventAnalyze(Guid itemId, MediaSegmentType type)
     {
-        using var db = _plugin.GetPluginDb();
-        var seg = await db.SegmentMetadata.FirstAsync(s => s.ItemId == itemId && s.Type == type).ConfigureAwait(false);
+        using var db = GetPluginDb();
+        var seg = await db.SegmentMetadata.FirstAsync(s => s.ItemId == itemId && s.Type == type && s.AnalyzerType == AnalyzerType.NotSet).ConfigureAwait(false);
+        // we may have multiple metadata for the same type+itemId. Search in all of them
         return seg is not null && seg.PreventAnalyzing;
+    }
+
+    /// <summary>
+    /// Delete all metadata for itemId with prevent analyze set to true. Without itemId deletes them all.
+    /// </summary>
+    /// <param name="itemId">Media ItemId.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    public async Task DeletePreventAnalyzeSegments(Guid? itemId)
+    {
+        using var db = GetPluginDb();
+        var query = db.SegmentMetadata.Where(s => s.PreventAnalyzing);
+
+        if (!itemId.IsNullOrEmpty())
+        {
+            query = db.SegmentMetadata.Where(s => s.ItemId == itemId);
+        }
+
+        await query.ExecuteDeleteAsync().ConfigureAwait(false);
     }
 
     /// <summary>
@@ -86,7 +131,7 @@ public sealed class SegmentMetadataDbApi : IDisposable
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task DeleteSegments(Guid itemId, MediaSegmentType? type)
     {
-        using var db = _plugin.GetPluginDb();
+        using var db = GetPluginDb();
         var query = db.SegmentMetadata.Where(s => s.ItemId == itemId);
 
         if (type is not null)
@@ -124,18 +169,11 @@ public sealed class SegmentMetadataDbApi : IDisposable
     }
 
     /// <summary>
-    /// Delete all segments when itemid is deleted from library.
+    /// Get context of plugin database.
     /// </summary>
-    /// <param name="sender">The sending entity.</param>
-    /// <param name="itemChangeEventArgs">The <see cref="ItemChangeEventArgs"/>.</param>
-    private async void LibraryManagerItemRemoved(object? sender, ItemChangeEventArgs itemChangeEventArgs)
+    /// <returns>Instance of db.</returns>
+    public MediaAnalyzerDbContext GetPluginDb()
     {
-        await DeleteSegments(itemChangeEventArgs.Item.Id, null).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc/>
-    public void Dispose()
-    {
-        _libraryManager.ItemRemoved -= LibraryManagerItemRemoved;
+        return new MediaAnalyzerDbContext(_pluginDbPath);
     }
 }

@@ -5,7 +5,7 @@ namespace Jellyfin.Plugin.MediaAnalyzer;
 /// <summary>
 /// Convert between Ticks and other time representations.
 /// </summary>
-public static class Ticks
+public static class Utils
 {
     /// <summary>
     /// Convert Seconds to Ticks.

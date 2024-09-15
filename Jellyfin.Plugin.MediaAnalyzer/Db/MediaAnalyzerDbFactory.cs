@@ -1,4 +1,3 @@
-using Jellyfin.Plugin.MediaAnalyzer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 

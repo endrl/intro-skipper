@@ -6,6 +6,11 @@ namespace Jellyfin.Plugin.MediaAnalyzer;
 public enum AnalyzerType
 {
     /// <summary>
+    /// No Analyzer.
+    /// </summary>
+    NotSet,
+
+    /// <summary>
     /// Blackframe Analyzer.
     /// </summary>
     BlackFrameAnalyzer,

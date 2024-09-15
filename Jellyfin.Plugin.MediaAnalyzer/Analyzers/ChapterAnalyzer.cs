@@ -7,6 +7,8 @@ using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
+using Jellyfin.Data.Enums;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -27,20 +29,21 @@ public class ChapterAnalyzer : IMediaFileAnalyzer
     }
 
     /// <inheritdoc />
-    public ReadOnlyCollection<QueuedMedia> AnalyzeMediaFiles(
+    public async Task<(ReadOnlyCollection<QueuedMedia> NotAnalyzed, ReadOnlyDictionary<Guid, Segment> Analyzed, ReadOnlyDictionary<Guid, SegmentMetadata> SegmentMetadata)> AnalyzeMediaFilesAsync(
         ReadOnlyCollection<QueuedMedia> analysisQueue,
-        AnalysisMode mode,
+        MediaSegmentType mode,
         CancellationToken cancellationToken)
     {
         var skippableRanges = new Dictionary<Guid, Segment>();
+        var metadata = new Dictionary<Guid, SegmentMetadata>();
 
-        var expression = mode == AnalysisMode.Introduction ?
+        var expression = mode == MediaSegmentType.Intro ?
             Plugin.Instance!.Configuration.ChapterAnalyzerIntroductionPattern :
             Plugin.Instance!.Configuration.ChapterAnalyzerEndCreditsPattern;
 
         if (string.IsNullOrWhiteSpace(expression))
         {
-            return analysisQueue;
+            return (analysisQueue, skippableRanges.AsReadOnly(), metadata.AsReadOnly());
         }
 
         foreach (var episode in analysisQueue)
@@ -49,6 +52,8 @@ public class ChapterAnalyzer : IMediaFileAnalyzer
             {
                 break;
             }
+
+            var meta = await Plugin.Instance!.GetMetadataDb().GetSegments(episode.ItemId, mode, AnalyzerType.ChapterAnalyzer);
 
             var skipRange = FindMatchingChapter(
                 episode,
@@ -61,23 +66,23 @@ public class ChapterAnalyzer : IMediaFileAnalyzer
                 continue;
             }
 
+            // protect against broken timestamps
+            if (skipRange.Start >= skipRange.End)
+            {
+                continue;
+            }
+
             skippableRanges.Add(episode.ItemId, skipRange);
+            if (meta is null)
+            {
+                metadata[episode.ItemId] = new SegmentMetadata(episode, mode, AnalyzerType.ChapterAnalyzer);
+            }
         }
 
-        if (skippableRanges.Count != 0)
-        {
-            _logger.LogInformation("Save {Count} segments", skippableRanges.Count);
-            Plugin.Instance!.UpdateTimestamps(skippableRanges, mode);
-        }
-        else
-        {
-            _logger.LogDebug("No segments found");
-        }
-
-        return analysisQueue
+        return (analysisQueue
             .Where(x => !skippableRanges.ContainsKey(x.ItemId))
             .ToList()
-            .AsReadOnly();
+            .AsReadOnly(), skippableRanges.AsReadOnly(), metadata.AsReadOnly());
     }
 
     /// <summary>
@@ -93,18 +98,18 @@ public class ChapterAnalyzer : IMediaFileAnalyzer
         QueuedMedia episode,
         Collection<ChapterInfo> chapters,
         string expression,
-        AnalysisMode mode)
+        MediaSegmentType mode)
     {
         Segment? matchingChapter = null;
 
         var config = Plugin.Instance?.Configuration ?? new Configuration.PluginConfiguration();
 
         var minDuration = config.MinimumIntroDuration;
-        int maxDuration = mode == AnalysisMode.Introduction ?
+        int maxDuration = mode == MediaSegmentType.Intro ?
             config.MaximumIntroDuration :
             config.MaximumEpisodeCreditsDuration;
 
-        if (mode == AnalysisMode.Credits)
+        if (mode == MediaSegmentType.Outro)
         {
             // Since the ending credits chapter may be the last chapter in the file, append a virtual
             // chapter at the very end of the file.
@@ -157,7 +162,7 @@ public class ChapterAnalyzer : IMediaFileAnalyzer
                 continue;
             }
 
-            matchingChapter = new(episode.ItemId, episode.IsEpisode, currentRange);
+            matchingChapter = new(episode.ItemId, episode.IsEpisode(), currentRange);
             _logger.LogTrace("{Base}: okay", baseMessage);
             break;
         }

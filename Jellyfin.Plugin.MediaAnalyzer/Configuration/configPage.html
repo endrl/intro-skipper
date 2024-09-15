@@ -449,29 +449,29 @@
                     const rightEpisode = selectEpisode2.options[selectEpisode2.selectedIndex];
 
                     // Try to get the timestamps of each intro, falling back a default value of zero if no intro was found
-                    let leftEpisodeIntro = await getJson("MediaSegment?type=Intro&typeIndex=0&itemId=" + leftEpisode.value);
+                    let leftEpisodeIntro = await getJson(`MediaSegments/${leftEpisode.value}?includeSegmentTypes=[Intro]`);
                     if (!leftEpisodeIntro.Items.length) {
-                        leftEpisodeIntro = { Start: 0, End: 0 };
+                        leftEpisodeIntro = { StartTicks: 0, EndTicks: 0 };
                     } else {
-                        leftEpisodeIntro = { Start: leftEpisodeIntro.Items[0].Start, End: leftEpisodeIntro.Items[0].End };
+                        leftEpisodeIntro = { StartTicks: ticksToSeconds(leftEpisodeIntro.Items[0].StartTicks), EndTicks: ticksToSeconds(leftEpisodeIntro.Items[0].EndTicks) };
                     }
 
-                    let rightEpisodeIntro = await getJson("MediaSegment?type=Intro&typeIndex=0&itemId=" + rightEpisode.value);
+                    let rightEpisodeIntro = await getJson(`MediaSegments/${rightEpisode.value}?includeSegmentTypes=[Intro]`);
                     if (!rightEpisodeIntro.Items.length) {
-                        rightEpisodeIntro = { Start: 0, End: 0 };
+                        rightEpisodeIntro = { StartTicks: 0, EndTicks: 0 };
                     } else {
-                        rightEpisodeIntro = { Start: rightEpisodeIntro.Items[0].Start, End: rightEpisodeIntro.Items[0].End };
+                        rightEpisodeIntro = { StartTicks: ticksToSeconds(rightEpisodeIntro.Items[0].StartTicks), EndTicks: ticksToSeconds(rightEpisodeIntro.Items[0].EndTicks) };
                     }
 
                     // Update the editor for the first and second episodes
                     document.querySelector("#timestampEditor").style.display = "unset";
                     document.querySelector("#editLeftEpisodeTitle").textContent = leftEpisode.text;
-                    document.querySelector("#editLeftEpisodeStart").value = Math.round(leftEpisodeIntro.Start);
-                    document.querySelector("#editLeftEpisodeEnd").value = Math.round(leftEpisodeIntro.End);
+                    document.querySelector("#editLeftEpisodeStart").value = Math.round(leftEpisodeIntro.StartTicks);
+                    document.querySelector("#editLeftEpisodeEnd").value = Math.round(leftEpisodeIntro.EndTicks);
 
                     document.querySelector("#editRightEpisodeTitle").textContent = rightEpisode.text;
-                    document.querySelector("#editRightEpisodeStart").value = Math.round(rightEpisodeIntro.Start);
-                    document.querySelector("#editRightEpisodeEnd").value = Math.round(rightEpisodeIntro.End);
+                    document.querySelector("#editRightEpisodeStart").value = Math.round(rightEpisodeIntro.StartTicks);
+                    document.querySelector("#editRightEpisodeEnd").value = Math.round(rightEpisodeIntro.EndTicks);
                 }
 
                 // adds an item to a dropdown
@@ -487,6 +487,16 @@
                     for (i = L; i >= 0; i--) {
                         select.remove(i);
                     }
+                }
+
+                // convert between seconds and ticks
+                function ticksToSeconds(ticks) {
+                    return ticks / 10_000_000
+                }
+
+                // convert between seconds and ticks
+                function secondsToTicks(seconds) {
+                    return 10_000_000 * seconds
                 }
 
                 // make an authenticated GET to the server and parse the response as JSON
@@ -594,10 +604,10 @@
                         if (!result) {
                             return;
                         }
-
-                        fetchWithAuth("MediaSegment?type="+mode, "DELETE", null);
-
-                        Dashboard.alert(mode + " timestamps erased");
+                        // FIXME: Can't implement, no upstream support
+                        // fetchWithAuth("MediaSegment?type="+mode, "DELETE", null);
+                        // Dashboard.alert(mode + " timestamps erased");
+                        Dashboard.alert("Can't erase 'all' timestamps, there is no api in jellyfin");
                     });
                 }
 
@@ -654,18 +664,20 @@
                 btnUpdateTimestamps.addEventListener("click", () => {
                     const lhsId = selectEpisode1.options[selectEpisode1.selectedIndex].value;
                     const newLhsIntro = {
-                        Start: document.querySelector("#editLeftEpisodeStart").value,
-                        End: document.querySelector("#editLeftEpisodeEnd").value,
-                        itemId: lhsId
+                        StartTicks: secondsToTicks(document.querySelector("#editLeftEpisodeStart").value),
+                        EndTicks: secondsToTicks(document.querySelector("#editLeftEpisodeEnd").value),
+                        ItemId: lhsId,
+                        Type: 'Intro'
                     };
 
                     const rhsId = selectEpisode2.options[selectEpisode2.selectedIndex].value;
                     const newRhsIntro = {
-                        Start: document.querySelector("#editRightEpisodeStart").value,
-                        End: document.querySelector("#editRightEpisodeEnd").value,
-                        itemId: rhsId
+                        StartTicks: secondsToTicks(document.querySelector("#editRightEpisodeStart").value),
+                        EndTicks: secondsToTicks(document.querySelector("#editRightEpisodeEnd").value),
+                        ItemId: rhsId,
+                        Type: 'Intro'
                     };
-
+                    // TODO: create new endpoint that can handle an update
                     fetchWithAuth("JellyfinPluginIntroSkip/Episode/" + lhsId + "/UpdateIntroTimestamps", "POST", JSON.stringify(newLhsIntro));
                     fetchWithAuth("JellyfinPluginIntroSkip/Episode/" + rhsId + "/UpdateIntroTimestamps", "POST", JSON.stringify(newRhsIntro));
 

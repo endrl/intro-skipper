@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Data.Enums;
 using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
 
@@ -13,7 +14,7 @@ using Microsoft.Extensions.Logging;
 /// </summary>
 public class BaseItemAnalyzerTask
 {
-    private readonly AnalysisMode _analysisMode;
+    private readonly MediaSegmentType _analyzingType;
 
     private readonly ILogger _logger;
 
@@ -29,12 +30,12 @@ public class BaseItemAnalyzerTask
     /// <param name="loggerFactory">Logger factory.</param>
     /// <param name="libraryManager">Library manager.</param>
     public BaseItemAnalyzerTask(
-        AnalysisMode mode,
+        MediaSegmentType mode,
         ILogger logger,
         ILoggerFactory loggerFactory,
         ILibraryManager libraryManager)
     {
-        _analysisMode = mode;
+        _analyzingType = mode;
         _logger = logger;
         _loggerFactory = loggerFactory;
         _libraryManager = libraryManager;
@@ -52,7 +53,7 @@ public class BaseItemAnalyzerTask
         var queueManager = new QueueManager(
             _loggerFactory.CreateLogger<QueueManager>(),
             _libraryManager,
-            _analysisMode);
+            _analyzingType);
 
         var queue = queueManager.GetMediaItems();
 
@@ -73,17 +74,17 @@ public class BaseItemAnalyzerTask
             MaxDegreeOfParallelism = Plugin.Instance!.Configuration.MaxParallelism
         };
 
-        Parallel.ForEach(queue, options, (season) =>
+        Parallel.ForEach(queue, options, async (season) =>
         {
             // Since the first run of the task can run for multiple hours, ensure that none
             // of the current media items were deleted from Jellyfin since the task was started.
             var verifiedItems = queueManager.VerifyQueue(
                 season.Value.AsReadOnly(),
-                this._analysisMode);
+                _analyzingType);
 
-            var notBlacklistedItems = queueManager.FilterWithBlacklist(verifiedItems, this._analysisMode);
+            var notBlacklistedItems = await queueManager.FilterWithBlacklistAsync(verifiedItems, _analyzingType).ConfigureAwait(false);
 
-            var (episodes, unanalyzed) = queueManager.FilterWithSegments(notBlacklistedItems, this._analysisMode);
+            var (episodes, unanalyzed) = await queueManager.FilterWithSegmentsAsync(notBlacklistedItems, _analyzingType).ConfigureAwait(false);
 
             if (episodes.Count == 0)
             {
@@ -94,20 +95,20 @@ public class BaseItemAnalyzerTask
 
             if (!unanalyzed)
             {
-                if (first.IsEpisode)
+                if (first.IsEpisode())
                 {
                     _logger.LogDebug(
                         "All episodes in {Name} season {Season} have already been analyzed for {AnalyzeType}",
                         first.SeriesName,
                         first.SeasonNumber,
-                        this._analysisMode);
+                        _analyzingType);
                 }
                 else
                 {
                     _logger.LogDebug(
                         "Movie {Name} have already been analyzed for {AnalyzeType}",
                         first.Name,
-                        this._analysisMode);
+                        _analyzingType);
                 }
 
                 return;
@@ -120,12 +121,12 @@ public class BaseItemAnalyzerTask
                     return;
                 }
 
-                var analyzed = AnalyzeItems(episodes, cancellationToken);
+                var analyzed = await AnalyzeItems(episodes, cancellationToken).ConfigureAwait(false);
                 Interlocked.Add(ref totalProcessed, analyzed);
             }
             catch (FingerprintException ex)
             {
-                if (first.IsEpisode)
+                if (first.IsEpisode())
                 {
                     _logger.LogWarning(
                         "Unable to analyze {Series} season {Season}: unable to fingerprint: {Ex}",
@@ -152,14 +153,14 @@ public class BaseItemAnalyzerTask
     /// <param name="items">Media items to analyze.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Number of items that were successfully analyzed.</returns>
-    private int AnalyzeItems(
+    private async Task<int> AnalyzeItems(
         ReadOnlyCollection<QueuedMedia> items,
         CancellationToken cancellationToken)
     {
         var totalItems = items.Count;
         var first = items[0];
 
-        if (first.IsEpisode)
+        if (first.IsEpisode())
         {
             // Only analyze specials (season 0) if the user has opted in.
             if (first.SeasonNumber == 0 && !Plugin.Instance!.Configuration.AnalyzeSeasonZero)
@@ -170,30 +171,31 @@ public class BaseItemAnalyzerTask
             _logger.LogInformation(
                 "Analyzing {Count} files for {Type} from {Name} season {Season}",
                 items.Count,
-                this._analysisMode,
+                _analyzingType,
                 first.SeriesName,
                 first.SeasonNumber);
         }
         else
         {
             // we ignore movies intro run
-            if (this._analysisMode == AnalysisMode.Credits)
+            if (_analyzingType == MediaSegmentType.Outro)
             {
                 _logger.LogInformation("Analyzing Movie (Outro): {Name}", first.Name);
             }
         }
 
-        var analyzers = new Collection<IMediaFileAnalyzer>();
-
-        analyzers.Add(new ChapterAnalyzer(_loggerFactory.CreateLogger<ChapterAnalyzer>()));
+        var analyzers = new Collection<IMediaFileAnalyzer>
+        {
+            new ChapterAnalyzer(_loggerFactory.CreateLogger<ChapterAnalyzer>())
+        };
 
         // Movies don't use chromparint analyzer
-        if (first.IsEpisode)
+        if (first.IsEpisode())
         {
             analyzers.Add(new ChromaprintAnalyzer(_loggerFactory.CreateLogger<ChromaprintAnalyzer>()));
         }
 
-        if (this._analysisMode == AnalysisMode.Credits)
+        if (_analyzingType == MediaSegmentType.Outro)
         {
             analyzers.Add(new BlackFrameAnalyzer(_loggerFactory.CreateLogger<BlackFrameAnalyzer>()));
         }
@@ -202,7 +204,10 @@ public class BaseItemAnalyzerTask
         // analyzed items from the queue.
         foreach (var analyzer in analyzers)
         {
-            items = analyzer.AnalyzeMediaFiles(items, this._analysisMode, cancellationToken);
+            var (notAnalyzed, analyzed, metadata) = await analyzer.AnalyzeMediaFilesAsync(items, _analyzingType, cancellationToken);
+            items = notAnalyzed;
+
+            await Plugin.Instance!.GetMediaSegmentsDb().CreateMediaSegments(analyzed, metadata, _analyzingType).ConfigureAwait(false);
         }
 
         // Unanalyzed items should be blacklisted
@@ -210,7 +215,7 @@ public class BaseItemAnalyzerTask
 
         if (blacklisted.Count > 0 && Plugin.Instance!.Configuration.EnableBlacklist)
         {
-            Plugin.Instance!.UpdateBlacklist(blacklisted, this._analysisMode);
+            await Plugin.Instance!.GetMetadataDb().CreatePreventAnalyzeSegments(blacklisted, _analyzingType).ConfigureAwait(false);
         }
 
         return totalItems;

@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
+using Jellyfin.Data.Enums;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
@@ -27,17 +29,18 @@ public class BlackFrameAnalyzer : IMediaFileAnalyzer
     }
 
     /// <inheritdoc />
-    public ReadOnlyCollection<QueuedMedia> AnalyzeMediaFiles(
+    public async Task<(ReadOnlyCollection<QueuedMedia> NotAnalyzed, ReadOnlyDictionary<Guid, Segment> Analyzed, ReadOnlyDictionary<Guid, SegmentMetadata> SegmentMetadata)> AnalyzeMediaFilesAsync(
         ReadOnlyCollection<QueuedMedia> analysisQueue,
-        AnalysisMode mode,
+        MediaSegmentType mode,
         CancellationToken cancellationToken)
     {
-        if (mode != AnalysisMode.Credits)
+        if (mode != MediaSegmentType.Outro)
         {
             throw new NotImplementedException("Blackframe analyzing is just suitable for Credits/Outro");
         }
 
         var creditTimes = new Dictionary<Guid, Segment>();
+        var metadata = new Dictionary<Guid, SegmentMetadata>();
 
         foreach (var episode in analysisQueue)
         {
@@ -45,6 +48,8 @@ public class BlackFrameAnalyzer : IMediaFileAnalyzer
             {
                 break;
             }
+
+            var meta = await Plugin.Instance!.GetMetadataDb().GetSegments(episode.ItemId, mode, AnalyzerType.BlackFrameAnalyzer);
 
             var intro = AnalyzeMediaFile(
                 episode,
@@ -56,23 +61,23 @@ public class BlackFrameAnalyzer : IMediaFileAnalyzer
                 continue;
             }
 
+            // protect against broken timestamps
+            if (intro.Start >= intro.End)
+            {
+                continue;
+            }
+
             creditTimes[episode.ItemId] = intro;
+            if (meta is null)
+            {
+                metadata[episode.ItemId] = new SegmentMetadata(episode, mode, AnalyzerType.BlackFrameAnalyzer);
+            }
         }
 
-        if (creditTimes.Count != 0)
-        {
-            _logger.LogInformation("Save {Count} segments", creditTimes.Count);
-            Plugin.Instance!.UpdateTimestamps(creditTimes, mode);
-        }
-        else
-        {
-            _logger.LogDebug("No segments found");
-        }
-
-        return analysisQueue
+        return (analysisQueue
             .Where(x => !creditTimes.ContainsKey(x.ItemId))
             .ToList()
-            .AsReadOnly();
+            .AsReadOnly(), creditTimes.AsReadOnly(), metadata.AsReadOnly());
     }
 
     /// <summary>
@@ -82,7 +87,7 @@ public class BlackFrameAnalyzer : IMediaFileAnalyzer
     /// <param name="mode">Analysis mode.</param>
     /// <param name="minimum">Percentage of the frame that must be black.</param>
     /// <returns>Credits timestamp.</returns>
-    public Segment? AnalyzeMediaFile(QueuedMedia episode, AnalysisMode mode, int minimum)
+    public Segment? AnalyzeMediaFile(QueuedMedia episode, MediaSegmentType mode, int minimum)
     {
         var config = Plugin.Instance?.Configuration ?? new Configuration.PluginConfiguration();
 
@@ -131,7 +136,7 @@ public class BlackFrameAnalyzer : IMediaFileAnalyzer
 
         if (firstFrameTime > 0)
         {
-            return new(episode.ItemId, episode.IsEpisode, new TimeRange(firstFrameTime, episode.Duration));
+            return new(episode.ItemId, episode.IsEpisode(), new TimeRange(firstFrameTime, episode.Duration));
         }
 
         return null;
