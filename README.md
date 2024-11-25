@@ -1,8 +1,14 @@
 # Jellyfin Media Analyzer
 
-Analyzes Movies and TV Shows to detect Intros and Outros. Uses the new official Jellyfin API.
+## Archived
+
+⚠️
+This project is no longer in development. Please move on to [intro-skipper](https://github.com/intro-skipper/intro-skipper?tab=readme-ov-file#intro-skipper)
+⚠️
 
 ## Features
+
+Analyzes Movies and TV Shows to detect Intros and Outros. Uses the new official Jellyfin API.
 
 * Detect Intro segments in tv shows
 * Detect Outro segments in tv shows and movies
@@ -14,7 +20,7 @@ Analyzes Movies and TV Shows to detect Intros and Outros. Uses the new official 
 
 ## Requirements
 
-* ⚠️ Jellyfin 10.10 unstable. For Jellyfin 10.8/10.9 use [jumoog's intro-skipper](https://github.com/jumoog/intro-skipper)
+* Jellyfin 10.10
 
 ## Installation instructions
 
